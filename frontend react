@@ -1,0 +1,235 @@
+#APP.JS#
+----------------------
+
+import React, { useState } from 'react';
+import './App.css';
+
+function App() {
+  const [query, setQuery] = useState('');
+  const [responses, setResponses] = useState([]);
+  const [conversation, setConversation] = useState([]);
+
+  const handleSendQuery = () => {
+    fetch('/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_input: query, intent: 'product_info' }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        setResponses((prevResponses) => [...prevResponses, data.response]);
+        setConversation((prevConversation) => [
+          ...prevConversation,
+          { user: { text: query }, bot: { text: data.response } },
+        ]);
+        setQuery('');
+      });
+  };
+
+  const handleKeyPress = (event) => {
+    if (event.key === 'Enter') {
+      handleSendQuery();
+    }
+  };
+
+  return (
+    <div className="container">
+      <div className="header">
+        <h1>Chatbot</h1>
+      </div>
+      <div className="input-area">
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Enter a query"
+        />
+        <button onClick={handleSendQuery}>Send</button>
+      </div>
+      <div className="conversation-area">
+        <ul>
+          {conversation.map((message, index) => (
+            <li key={index}>
+              <span className="user-text">{message.user.text}</span>
+              <span className="bot-text">{message.bot.text}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="history-area">
+        <h2>Recent queries:</h2>
+        <ul>
+          {responses.map((response, index) => (
+            <li key={index}>{response}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
+#APP.CSS#
+---------------------------------------------------
+.container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 20px;
+  background-color: #f2f2f2;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.input-area {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.input-area input {
+  width: 70%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.input-area input:focus {
+  border-color: #aaa;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.button {
+  margin-left: 10px;
+  padding: 10px 20px;
+  background-color: #4CAF50;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: #3e8e41;
+}
+
+.conversation-area {
+  margin-bottom: 20px;
+}
+
+.conversation-area ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.conversation-area li {
+  padding: 10px;
+  border-bottom: 1px solid #ccc;
+}
+
+.conversation-area li:last-child {
+  border-bottom: none;
+}
+
+.user-text {
+  background-color: #ccc;
+  padding: 5px;
+  border-radius: 5px;
+  margin-right: 10px;
+}
+
+.bot-text {
+  background-color: #4CAF50;
+  padding: 5px;
+  border-radius: 5px;
+}
+
+.history-area {
+  margin-bottom: 20px;
+}
+
+.history-area h2 {
+  margin-bottom: 10px;
+}
+
+.history-area ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.history-area li {
+  padding: 10px;
+  border-bottom: 1px solid #ccc;
+}
+
+.history-area li:last-child {
+  border-bottom: none;
+}
+
+
+
+#INDEX.JS#
+-----------------
+
+import React from 'react';
+import ReactDOM from 'react-dom';
+import App from './App';
+
+ReactDOM.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
+
+#PACKAGE.JSON#
+-----------------------------------------------------
+{
+  "name": "chatbot",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^12.0.0",
+    "@testing-library/user-event": "^13.2.1",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-scripts": "^4.0.3"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
