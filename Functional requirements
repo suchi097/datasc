@@ -1,0 +1,218 @@
+#databasesetup#
+-------------------------------------------
+database.py.
+*************
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+mysqlconnector://username:password@localhost/dbname')
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()    
+******
+##Define SQLAlchemy models (models.py). ##
+-------------------------------------------------------------------
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DECIMAL
+from .database import Base
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    contact_info = Column(String)
+    product_categories = Column(Text)
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    brand = Column(String)
+    price = Column(DECIMAL(scale=2))
+    category = Column(String)
+    description = Column(Text)
+    supplier_id = Column(Integer, ForeignKey('suppliers.id'))
+
+
+
+###CRUD OPERATION###
+---------------------------------------------------------------------
+from sqlalchemy.orm import Session
+from .models import Product, Supplier
+
+def get_products_by_brand(db: Session, brand: str):
+    return db.query(Product).filter(Product.brand == brand).all()
+
+def get_suppliers_providing_product(db: Session, category: str):
+    return db.query(Supplier).filter(Supplier.product_categories.like(f"%{category}%")).all()
+
+def get_product_details(db: Session, product_name: str):
+    return db.query(Product).filter(Product.name == product_name).first()
+
+
+#######Implement the chatbot logic to integrate with LangGraph and LLM in chatbot.py.#####
+------------------------------------------------------------------------------------------------------
+from sqlalchemy.orm import Session
+from transformers import pipeline
+from .crud import get_products_by_brand, get_suppliers_providing_product, get_product_details
+
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+
+def handle_query(db: Session, query: str):
+    if query.startswith("Show me all products under brand"):
+        brand = query.split("under brand")[-1].strip()
+        products = get_products_by_brand(db, brand)
+        return {"type": "products", "data": products}
+
+    elif query.startswith("Which suppliers provide"):
+        category = query.split("provide")[-1].strip()
+        suppliers = get_suppliers_providing_product(db, category)
+        return {"type": "suppliers", "data": suppliers}
+
+    elif query.startswith("Give me details of product"):
+        product_name = query.split("of product")[-1].strip()
+        product = get_product_details(db, product_name)
+        return {"type": "product", "data": product}
+
+    return {"type": "error", "message": "I cannot understand your query."}
+
+
+
+
+####Create the main FastAPI application to handle incoming requests in main.py.######
+--------------------------------------------------------------------------------------------------------
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+from .database import SessionLocal, engine
+from . import models, chatbot
+
+models.Base.metadata.create_all(bind=engine)
+
+app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.post("/chatbot/")
+async def query_chatbot(query: str, db: Session = Depends(get_db)):
+    response = chatbot.handle_query(db, query)
+    return response
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+####STORE COMPONENT USING REDUX####
+-------------------------------------------------------------------------
+import { createStore } from 'redux';
+
+const initialState = {
+    messages: []
+};
+
+const reducer = (state = initialState, action) => {
+    switch (action.type) {
+        case 'ADD_MESSAGE':
+            return { ...state, messages: [...state.messages, action.payload] };
+        default:
+            return state;
+    }
+};
+
+const store = createStore(reducer);
+
+export default store;
+
+
+
+###Chatbot component that interacts with your backend:#####
+-------------------------------------------------------------------------------
+import React, { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import axios from 'axios';
+
+export default function Chatbot() {
+    const [input, setInput] = useState("");
+    const messages = useSelector((state) => state.messages);
+    const dispatch = useDispatch();
+
+    const handleSend = async () => {
+        if (input.trim() === "") return;
+
+         
+        dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'user', text: input } });
+
+        try {
+            const response = await axios.post('http://localhost:8000/chatbot/', { query: input });
+            const data = response.data;
+
+            if (data.type === 'products') {
+                
+                dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'bot', text: JSON.stringify(data.data) } });
+            } else if (data.type === 'suppliers') {
+                
+                dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'bot', text: JSON.stringify(data.data) } });
+            } else if (data.type === 'product') {
+                
+                dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'bot', text: JSON.stringify(data.data) } });
+            } else {
+                dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'bot', text: data.message } });
+            }
+        } catch (error) {
+            console.error("Error fetching data from the API", error);
+            dispatch({ type: 'ADD_MESSAGE', payload: { sender: 'bot', text: "Error retrieving data." } });
+        }
+
+        setInput("");
+    };
+
+    return (
+        <div>
+            <div>
+                {messages.map((msg, index) => (
+                    <div key={index} className={msg.sender}>
+                        {msg.text}
+                    </div>
+                ))}
+            </div>
+            <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => (e.key === 'Enter' ? handleSend() : null)}
+            />
+            <button onClick={handleSend}>Send</button>
+        </div>
+    );
+}
+
+###Integrate the Chatbot component into your main App.jsx.#####
+----------------------------------------------------------------------------------
+import React from 'react';
+import { Provider } from 'react-redux';
+import store from './store/store';
+import Chatbot from './components/Chatbot';
+
+function App() {
+    return (
+        <Provider store={store}>
+            <div>
+                <h1>Chatbot</h1>
+                <Chatbot />
+            </div>
+        </Provider>
+    );
+}
+
+export default App;
