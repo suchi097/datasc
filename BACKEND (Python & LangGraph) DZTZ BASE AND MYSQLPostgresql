@@ -1,0 +1,83 @@
+#DATA BASE SCHEMA#
+-----------------------------------
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    contact_info VARCHAR(255),
+    product_categories TEXT
+);
+
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    brand VARCHAR(255),
+    price DECIMAL(10, 2),
+    category VARCHAR(255),
+    description TEXT,
+    supplier_id INT,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+);
+
+
+#SAMPLE SQL INSERT#
+-----------------------------------------
+INSERT INTO suppliers (name, contact_info, product_categories) VALUES
+('Supplier A', 'contact@supplierA.com', 'Electronics, Gadgets'),
+('Supplier B', 'contact@supplierB.com', 'Home Appliances, Furniture'),
+('Supplier C', 'contact@supplierC.com', 'Toys, Games');
+
+INSERT INTO products (name, brand, price, category, description, supplier_id) VALUES
+('Smartphone Model X', 'Brand A', 699.99, 'Electronics', 'Latest model with high performance', 1),
+('Air Purifier Model Y', 'Brand B', 149.99, 'Home Appliances', 'Removes dust and allergens', 2),
+('Puzzle Game', 'Brand C', 19.99, 'Toys', 'Fun for all ages', 3);
+
+#SAMPLE PYTHON CODE#
+--------------------------------------------
+
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from transformers import pipeline
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://username:password@localhost/dbname')  
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")  # You can choose any suitable LLM here
+def get_supplier_data(supplier_id):
+    with Session() as session:
+        result = session.execute(text("SELECT * FROM suppliers WHERE id = :id"), {'id': supplier_id})
+        return result.fetchone()
+def summarize_supplier_info(supplier_info):
+    summary = summarizer(supplier_info, max_length=50, min_length=25, do_sample=False)
+    return summary[0]['summary_text']
+
+def chatbot(query):
+    if query.startswith("Get Supplier Info:"):
+        supplier_id = int(query.split(":")[1].strip())
+        supplier_data = get_supplier_data(supplier_id)
+        
+        if supplier_data:
+            supplier_info = f"Supplier Name: {supplier_data['name']}, Contact: {supplier_data['contact_info']}, Categories: {supplier_data['product_categories']}"
+            summary = summarize_supplier_info(supplier_info)
+            return f"Supplier Summary: {summary}"
+        else:
+            return "Supplier not found."
+    elif query.startswith("Get Products for Supplier:"):
+        supplier_id = int(query.split(":")[1].strip())
+        products = get_product_data_by_supplier(supplier_id)
+        
+        if products:
+            product_list = "\n".join([f"Product Name: {prod['name']}, Price: ${prod['price']}" for prod in products])
+            return f"Products:\n{product_list}"
+        else:
+            return "No products found for this supplier."
+    
+    return "I can only help with supplier or product inquiries!"
+
+if __name__ == '__main__':
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ['exit', 'quit']:
+            print("Chatbot: Goodbye!")
+            break
+        response = chatbot(user_input)
+        print(f"Chatbot: {response}")
